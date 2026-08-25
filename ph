@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+#
+# ph - Command line interface for the Pi-hole API.
+#
+# Author:      Edvin Lidholm
+# Maintainer:  Edvin Lidholm
+# Repository:  https://github.com/elidholm/ph
+# License:     Apache License 2.0 (see LICENSE)
+#
+# Description:
+#   Small CLI wrapper around the Pi-hole REST API. Currently supports
+#   temporarily disabling Pi-hole blocking for a specified duration.
+#
+
+# color codes
+NC='\033[0m'
+RED='\033[00;31m'
+GREEN='\033[00;32m'
+PURPLE='\033[00;35m'
+BLUE='\033[00;34m'
+SEA='\033[38;5;49m'
+YELLOW='\033[00;33m'
+
+VERBOSE=false
+
+pihole_api_url=${PIHOLE_API_URL-}
+default_duration=10
+curl_timeout=15
+
+print_usage() {
+  cat <<EOF
+
+Usage: ${0##*/} [command] [arguments]
+
+Commands:
+  disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds)
+
+Arguments:
+  -h, --help        Show this help message
+EOF
+}
+
+print_disable_usage() {
+  cat <<EOF
+
+Usage: ${0##*/} disable [arguments]
+
+Disable Pi-hole blocking for a duration, then blocking resumes automatically.
+
+Arguments:
+  -<n>              Duration in seconds to disable Pi-hole (default: ${default_duration})
+  -h, --help        Show this help message
+  -v, --verbose     Enable verbose logging
+
+Examples:
+  ${0##*/} disable
+  ${0##*/} disable -30
+EOF
+}
+
+print_help() {
+  printf '%s\n\n' 'Command line interface for the Pi-hole API.'
+  print_usage
+}
+
+info() {
+  local msg=$*
+  local timestamp
+
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  printf "${PURPLE}%s\t${BLUE}   [INFO]${NC}\t%s\n" "$timestamp" "$msg"
+}
+
+debug() {
+  if [[ ${VERBOSE-} == true ]]; then
+    local msg=$*
+    local timestamp
+
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    printf "${PURPLE}%s\t${SEA}  [DEBUG]${NC}\t%s\n" "$timestamp" "$msg"
+  fi
+}
+
+warning() {
+  local msg=$*
+  local timestamp
+
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  printf "${PURPLE}%s\t${YELLOW}[WARNING]${NC}\t%s\n" "$timestamp" "$msg" >&2
+}
+
+fatal() {
+  local msg=$*
+  local timestamp
+
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  printf "${PURPLE}%s\t${RED}  [FATAL]${NC}\t%s\n" "$timestamp" "$msg" >&2
+  return 1
+}
+
+usage_error() {
+  local usage_printer=$1
+  shift
+
+  local msg=$*
+
+  printf "${RED}[ERROR]${NC} %s\n" "$@"
+  "$usage_printer" >&2
+  return 1
+}
+
+verify_dependencies() {
+  local dependency
+  local dependencies=(curl jq)
+
+  debug "Verifying required dependencies: ${dependencies[*]}"
+  for dependency in "${dependencies[@]}"; do
+    if ! command -v "$dependency" >/dev/null 2>&1; then
+      fatal "Missing dependency: $dependency"
+      return 1
+    fi
+    debug "Found dependency: $dependency"
+  done
+}
+
+validate_duration() {
+  local duration=$1
+
+  debug "Validating duration: $duration"
+  [[ $duration =~ ^[0-9]+$ ]] && ((duration > 0))
+}
+
+get_session_id() {
+  local auth_payload
+  local auth_response
+  local session_id
+
+  debug 'Requesting Pi-hole authentication token...' >&2
+  auth_payload=$(jq -n --arg password "$PIHOLE_API_KEY" '{password: $password}') || {
+    fatal 'Failed to build the authentication request.'
+    return 1
+  }
+
+  if ! auth_response=$(curl --silent --show-error --fail-with-body \
+    --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
+    --header 'Content-Type: application/json' \
+    --data "$auth_payload" \
+    "${pihole_api_url}/auth"); then
+    fatal 'Pi-hole authentication request failed.'
+    return 1
+  fi
+  debug 'Received Pi-hole authentication response.' >&2
+
+  if ! session_id=$(jq --exit-status --raw-output '.session.sid // empty' <<<"$auth_response"); then
+    fatal 'Pi-hole authentication response did not contain a session ID.'
+    return 1
+  fi
+  info 'Authenticated with Pi-hole successfully.' >&2
+
+  printf '%s\n' "$session_id"
+}
+
+disable_blocking() {
+  local duration=$1
+  local session_id=$2
+  local response
+
+  info "Disabling Pi-Hole for $duration seconds..."
+  debug "Sending disable request to Pi-hole API (timer=${duration})..."
+
+  if ! response=$(curl --silent --show-error --fail-with-body \
+    --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
+    --header 'Content-Type: application/json' \
+    --header "X-FTL-SID: ${session_id}" \
+    --data "{\"blocking\":false,\"timer\":${duration}}" \
+    "${pihole_api_url}/dns/blocking"); then
+    fatal 'Pi-hole blocking request failed.'
+    return 1
+  fi
+
+  debug "Pi-hole response: $response"
+  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been disabled.'
+}
+
+close_session() {
+  local session_id=$1
+
+  debug 'Closing Pi-hole session...'
+  if ! curl --silent --show-error --fail-with-body --request DELETE \
+    --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
+    --header "X-FTL-SID: ${session_id}" \
+    "${pihole_api_url}/auth" >/dev/null; then
+    warning 'Failed to close Pi-hole session (best-effort, ignoring).'
+  fi
+  debug 'Pi-hole session closed.'
+}
+
+disable_command() {
+  local argument
+  local duration=''
+  local session_id
+
+  for argument in "$@"; do
+    debug "Parsing argument: $argument"
+    case $argument in
+    help | -h | --help)
+      print_disable_usage
+      return 0
+      ;;
+    -[0-9]*)
+      if [[ -n $duration ]]; then
+        usage_error print_disable_usage 'disable accepts at most one duration.'
+        return 1
+      fi
+      duration=${argument#-}
+      if ! validate_duration "$duration"; then
+        usage_error print_disable_usage "Duration must be a positive integer: ${argument@Q}"
+        return 1
+      fi
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      debug 'Verbose logging enabled.'
+      ;;
+    *)
+      usage_error print_disable_usage "Unknown argument: ${argument@Q}"
+      return 1
+      ;;
+    esac
+  done
+
+  duration=${duration:-$default_duration}
+  debug "Resolved duration: ${duration}s"
+
+  verify_dependencies || return 1
+  if [[ -z ${PIHOLE_API_URL-} ]]; then
+    fatal 'Environment variable PIHOLE_API_URL is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_URL is set.'
+  if [[ -z ${PIHOLE_API_KEY-} ]]; then
+    fatal 'Environment variable PIHOLE_API_KEY is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_KEY is set.'
+
+  session_id=$(get_session_id) || return 1
+  disable_blocking "$duration" "$session_id"
+  local exit_status=$?
+  close_session "$session_id"
+  return "$exit_status"
+}
+
+main() {
+  local command=${1-}
+
+  debug "Dispatching command: ${command:-<none>}"
+  case $command in
+  -h | --help)
+    print_help
+    ;;
+  disable)
+    shift
+    disable_command "$@"
+    ;;
+  '')
+    print_help >&2
+    return 1
+    ;;
+  *)
+    usage_error print_usage "Unknown command: ${command@Q}"
+    ;;
+  esac
+}
+
+main "$@"
