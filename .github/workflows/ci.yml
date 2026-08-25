@@ -1,0 +1,74 @@
+---
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 0 * * *' # Every day at midnight
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch/PR to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  markdown-lint:
+    name: Markdown lint (markdownlint-cli2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v24.2.0
+        with:
+          globs: '**/*.md'
+
+  shell-lint:
+    name: Shell lint (shellcheck + shfmt)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: '.'
+
+      - name: Run shfmt
+        uses: collin-miller/shfmt-action@v1
+        with:
+          args: -d -i 2 ./ph
+
+  actions-lint:
+    name: GitHub Actions lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          fail-on-error: false
+          flags: "-ignore SC2242"
+
+      - name: Actionlint Summary
+        if: ${{ steps.actionlint.outputs.exit-code != 0 }}
+        run: |
+          echo "Used actionlint version ${{ steps.actionlint.outputs.version-semver }}"
+          echo "Used actionlint release ${{ steps.actionlint.outputs.version-tag }}"
+          echo "actionlint ended with ${{ steps.actionlint.outputs.exit-code }} exit code"
+          echo "actionlint ended because '${{ steps.actionlint.outputs.exit-message }}'"
+          echo "actionlint found ${{ steps.actionlint.outputs.total-errors }} errors"
+          echo "actionlint checked ${{ steps.actionlint.outputs.total-files }} files"
+          echo "actionlint cache used: ${{ steps.actionlint.outputs.cache-hit }}"
+          exit ${{ steps.actionlint.outputs.exit-code }}
+
