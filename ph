@@ -21,7 +21,8 @@ BLUE='\033[00;34m'
 SEA='\033[38;5;49m'
 YELLOW='\033[00;33m'
 
-VERBOSE=false
+VERBOSE=${VERBOSE:-false}
+QUIET=${QUIET:-false}
 
 pihole_api_url=${PIHOLE_API_URL-}
 default_duration=10
@@ -56,6 +57,7 @@ Arguments:
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
   --no-color        Disable color output
+  -q, --quiet       Suppress all logging output (overrides verbose)
 
 Examples:
   ${0##*/} disable
@@ -75,6 +77,7 @@ Arguments:
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
   --no-color        Disable color output
+  -q, --quiet       Suppress all logging output (overrides verbose)
 
 Examples:
   ${0##*/} enable
@@ -93,10 +96,14 @@ Arguments:
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
   --no-color        Disable color output
+  -q, --quiet       Suppress all logging output (overrides verbose)
 EOF
 }
 
 info() {
+  if [[ ${QUIET-} == true ]]; then
+    return 0
+  fi
   local msg=$*
   local timestamp
 
@@ -105,16 +112,20 @@ info() {
 }
 
 debug() {
-  if [[ ${VERBOSE-} == true ]]; then
-    local msg=$*
-    local timestamp
-
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    printf "${PURPLE}%s\t${SEA}  [DEBUG]${NC}\t%s\n" "$timestamp" "$msg"
+  if [[ ${QUIET-} == true || ${VERBOSE-} == false ]]; then
+    return 0
   fi
+  local msg=$*
+  local timestamp
+
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  printf "${PURPLE}%s\t${SEA}  [DEBUG]${NC}\t%s\n" "$timestamp" "$msg"
 }
 
 warning() {
+  if [[ ${QUIET-} == true ]]; then
+    return 0
+  fi
   local msg=$*
   local timestamp
 
@@ -123,6 +134,9 @@ warning() {
 }
 
 fatal() {
+  if [[ ${QUIET-} == true ]]; then
+    return 0
+  fi
   local msg=$*
   local timestamp
 
@@ -258,7 +272,7 @@ blocking_status() {
   timer=$(jq --exit-status --raw-output '.timer // empty' <<<"$response")
   response_time=$(jq --exit-status --raw-output '.took // empty' <<<"$response")
 
-  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking status:'
+  printf "${GREEN}%s${NC}\n" 'Pi-hole blocking status:'
   printf "\t${BLUE}%s${YELLOW}%s${NC} " 'Blocking' ':'
   if [[ $blocking_enabled == enabled ]]; then
     printf "${GREEN}%s${NC}\n" 'Enabled'
@@ -317,6 +331,9 @@ disable_command() {
       BLUE=$NC
       SEA=$NC
       YELLOW=$NC
+      ;;
+    -q | --quiet)
+      QUIET=true
       ;;
     *)
       usage_error print_disable_usage "Unknown argument: ${argument@Q}"
@@ -383,6 +400,9 @@ enable_command() {
       SEA=$NC
       YELLOW=$NC
       ;;
+    -q | --quiet)
+      QUIET=true
+      ;;
     *)
       usage_error print_enable_usage "Unknown argument: ${argument@Q}"
       return 1
@@ -435,6 +455,9 @@ status_command() {
       BLUE=$NC
       SEA=$NC
       YELLOW=$NC
+      ;;
+    -q | --quiet)
+      QUIET=true
       ;;
     *)
       usage_error print_status_usage "Unknown argument: ${argument@Q}"
