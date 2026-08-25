@@ -34,6 +34,7 @@ Usage: ${0##*/} [command] [arguments]
 
 Commands:
   disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds)
+  enable            Enable Pi-hole for a specified duration (default: ${default_duration} seconds)
 
 Arguments:
   -h, --help        Show this help message
@@ -45,7 +46,7 @@ print_disable_usage() {
 
 Usage: ${0##*/} disable [arguments]
 
-Disable Pi-hole blocking for a duration, then blocking resumes automatically.
+Disable Pi-hole blocking for a duration, then orignial blocking state resumes automatically.
 
 Arguments:
   -<n>              Duration in seconds to disable Pi-hole (default: ${default_duration})
@@ -55,6 +56,24 @@ Arguments:
 Examples:
   ${0##*/} disable
   ${0##*/} disable -30
+EOF
+}
+
+print_enable_usage() {
+  cat <<EOF
+
+Usage: ${0##*/} enable [arguments]
+
+Enable Pi-hole blocking for a duration, then original blocking state resumes automatically.
+
+Arguments:
+  -<n>              Duration in seconds to enable Pi-hole (default: ${default_duration})
+  -h, --help        Show this help message
+  -v, --verbose     Enable verbose logging
+
+Examples:
+  ${0##*/} enable
+  ${0##*/} enable -30
 EOF
 }
 
@@ -182,6 +201,28 @@ disable_blocking() {
   printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been disabled.'
 }
 
+enable_blocking() {
+  local duration=$1
+  local session_id=$2
+  local response
+
+  info "Enabling Pi-Hole for $duration seconds..."
+  debug "Sending enable request to Pi-hole API (timer=${duration})..."
+
+  if ! response=$(curl --silent --show-error --fail-with-body \
+    --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
+    --header 'Content-Type: application/json' \
+    --header "X-FTL-SID: ${session_id}" \
+    --data "{\"blocking\":true,\"timer\":${duration}}" \
+    "${pihole_api_url}/dns/blocking"); then
+    fatal 'Pi-hole blocking request failed.'
+    return 1
+  fi
+
+  debug "Pi-hole response: $response"
+  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been enabled.'
+}
+
 close_session() {
   local session_id=$1
 
@@ -251,6 +292,62 @@ disable_command() {
   return "$exit_status"
 }
 
+enable_command() {
+  local argument
+  local duration=''
+  local session_id
+
+  for argument in "$@"; do
+    debug "Parsing argument: $argument"
+    case $argument in
+    help | -h | --help)
+      print_enable_usage
+      return 0
+      ;;
+    -[0-9]*)
+      if [[ -n $duration ]]; then
+        usage_error print_enable_usage 'enable accepts at most one duration.'
+        return 1
+      fi
+      duration=${argument#-}
+      if ! validate_duration "$duration"; then
+        usage_error print_enable_usage "Duration must be a positive integer: ${argument@Q}"
+        return 1
+      fi
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      debug 'Verbose logging enabled.'
+      ;;
+    *)
+      usage_error print_enable_usage "Unknown argument: ${argument@Q}"
+      return 1
+      ;;
+    esac
+  done
+
+  duration=${duration:-$default_duration}
+  debug "Resolved duration: ${duration}s"
+
+  verify_dependencies || return 1
+  if [[ -z ${PIHOLE_API_URL-} ]]; then
+    fatal 'Environment variable PIHOLE_API_URL is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_URL is set.'
+  if [[ -z ${PIHOLE_API_KEY-} ]]; then
+    fatal 'Environment variable PIHOLE_API_KEY is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_KEY is set.'
+
+  session_id=$(get_session_id) || return 1
+  enable_blocking "$duration" "$session_id"
+  local exit_status=$?
+  close_session "$session_id"
+  return "$exit_status"
+}
+
 main() {
   local command=${1-}
 
@@ -262,6 +359,10 @@ main() {
   disable)
     shift
     disable_command "$@"
+    ;;
+  enable)
+    shift
+    enable_command "$@"
     ;;
   '')
     print_help >&2
