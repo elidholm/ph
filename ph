@@ -32,6 +32,8 @@ print_usage() {
 
 Usage: ${0##*/} [command] [arguments]
 
+Command line interface for the Pi-hole API.
+
 Commands:
   disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds)
   enable            Enable Pi-hole for a specified duration (default: ${default_duration} seconds)
@@ -53,6 +55,7 @@ Arguments:
   -<n>              Duration in seconds to disable Pi-hole (default: ${default_duration})
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
+  --no-color        Disable color output
 
 Examples:
   ${0##*/} disable
@@ -71,6 +74,7 @@ Arguments:
   -<n>              Duration in seconds to enable Pi-hole (default: ${default_duration})
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
+  --no-color        Disable color output
 
 Examples:
   ${0##*/} enable
@@ -88,12 +92,8 @@ Show the current Pi-hole blocking status.
 Arguments:
   -h, --help        Show this help message
   -v, --verbose     Enable verbose logging
+  --no-color        Disable color output
 EOF
-}
-
-print_help() {
-  printf '%s\n\n' 'Command line interface for the Pi-hole API.'
-  print_usage
 }
 
 info() {
@@ -309,6 +309,15 @@ disable_command() {
       VERBOSE=true
       debug 'Verbose logging enabled.'
       ;;
+    --no-color)
+      debug 'Disabling color output.'
+      RED=$NC
+      GREEN=$NC
+      PURPLE=$NC
+      BLUE=$NC
+      SEA=$NC
+      YELLOW=$NC
+      ;;
     *)
       usage_error print_disable_usage "Unknown argument: ${argument@Q}"
       return 1
@@ -365,6 +374,15 @@ enable_command() {
       VERBOSE=true
       debug 'Verbose logging enabled.'
       ;;
+    --no-color)
+      debug 'Disabling color output.'
+      RED=$NC
+      GREEN=$NC
+      PURPLE=$NC
+      BLUE=$NC
+      SEA=$NC
+      YELLOW=$NC
+      ;;
     *)
       usage_error print_enable_usage "Unknown argument: ${argument@Q}"
       return 1
@@ -409,6 +427,15 @@ status_command() {
       VERBOSE=true
       debug 'Verbose logging enabled.'
       ;;
+    --no-color)
+      debug 'Disabling color output.'
+      RED=$NC
+      GREEN=$NC
+      PURPLE=$NC
+      BLUE=$NC
+      SEA=$NC
+      YELLOW=$NC
+      ;;
     *)
       usage_error print_status_usage "Unknown argument: ${argument@Q}"
       return 1
@@ -441,7 +468,7 @@ main() {
   debug "Dispatching command: ${command:-<none>}"
   case $command in
   -h | --help)
-    print_help
+    print_usage
     ;;
   disable)
     shift
@@ -456,7 +483,7 @@ main() {
     status_command "$@"
     ;;
   '')
-    print_help >&2
+    print_usage >&2
     return 1
     ;;
   *)
