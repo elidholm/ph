@@ -35,6 +35,7 @@ Usage: ${0##*/} [command] [arguments]
 Commands:
   disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds)
   enable            Enable Pi-hole for a specified duration (default: ${default_duration} seconds)
+  status            Show the current Pi-hole blocking status
 
 Arguments:
   -h, --help        Show this help message
@@ -74,6 +75,19 @@ Arguments:
 Examples:
   ${0##*/} enable
   ${0##*/} enable -30
+EOF
+}
+
+print_status_usage() {
+  cat <<EOF
+
+Usage: ${0##*/} status [arguments]
+
+Show the current Pi-hole blocking status.
+
+Arguments:
+  -h, --help        Show this help message
+  -v, --verbose     Enable verbose logging
 EOF
 }
 
@@ -223,6 +237,38 @@ enable_blocking() {
   printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been enabled.'
 }
 
+blocking_status() {
+  local session_id=$1
+  local response
+
+  info 'Retrieving Pi-Hole blocking status...'
+  debug 'Sending status query request to Pi-hole API...'
+
+  if ! response=$(curl --silent --show-error --fail-with-body \
+    --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
+    --header 'Content-Type: application/json' \
+    --header "X-FTL-SID: ${session_id}" \
+    "${pihole_api_url}/dns/blocking"); then
+    fatal 'Pi-hole blocking request failed.'
+    return 1
+  fi
+
+  debug "Pi-hole response: $response"
+  blocking_enabled=$(jq --exit-status --raw-output '.blocking // empty' <<<"$response")
+  timer=$(jq --exit-status --raw-output '.timer // empty' <<<"$response")
+  response_time=$(jq --exit-status --raw-output '.took // empty' <<<"$response")
+
+  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking status:'
+  printf "\t${BLUE}%s${YELLOW}%s${NC} " 'Blocking' ':'
+  if [[ $blocking_enabled == enabled ]]; then
+    printf "${GREEN}%s${NC}\n" 'Enabled'
+  else
+    printf "${RED}%s${NC}\n" 'Disabled'
+  fi
+  printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Timer' ':' "${timer:-N/A}"
+  printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Response time' ':' "${response_time}s"
+}
+
 close_session() {
   local session_id=$1
 
@@ -348,6 +394,47 @@ enable_command() {
   return "$exit_status"
 }
 
+status_command() {
+  local argument
+  local session_id
+
+  for argument in "$@"; do
+    debug "Parsing argument: $argument"
+    case $argument in
+    help | -h | --help)
+      print_status_usage
+      return 0
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      debug 'Verbose logging enabled.'
+      ;;
+    *)
+      usage_error print_status_usage "Unknown argument: ${argument@Q}"
+      return 1
+      ;;
+    esac
+  done
+
+  verify_dependencies || return 1
+  if [[ -z ${PIHOLE_API_URL-} ]]; then
+    fatal 'Environment variable PIHOLE_API_URL is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_URL is set.'
+  if [[ -z ${PIHOLE_API_KEY-} ]]; then
+    fatal 'Environment variable PIHOLE_API_KEY is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_KEY is set.'
+
+  session_id=$(get_session_id) || return 1
+  blocking_status "$session_id"
+  local exit_status=$?
+  close_session "$session_id"
+  return "$exit_status"
+}
+
 main() {
   local command=${1-}
 
@@ -363,6 +450,10 @@ main() {
   enable)
     shift
     enable_command "$@"
+    ;;
+  status)
+    shift
+    status_command "$@"
     ;;
   '')
     print_help >&2
