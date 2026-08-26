@@ -65,3 +65,13 @@ ph disable -30       # Disable blocking for 30 seconds
 ph disable --help    # Show help for the disable command
 ph --help            # Show general help
 ```
+
+## Local development (bash tests)
+
+Requirements: `bash` + [`bats-core`](https://github.com/bats-core/bats-core).
+
+```bash
+git clone https://github.com/elidholm/ph.git
+cd ph
+bats tests
+```
