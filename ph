@@ -296,6 +296,19 @@ close_session() {
   debug 'Pi-hole session closed.'
 }
 
+with_pihole_session() {
+  local work_fn=$1
+  shift
+  local session_id
+  local exit_status
+
+  session_id=$(get_session_id) || return 1
+  "$work_fn" "$@" "$session_id"
+  exit_status=$?
+  close_session "$session_id"
+  return "$exit_status"
+}
+
 disable_command() {
   local argument
   local duration=''
@@ -357,11 +370,7 @@ disable_command() {
   fi
   debug 'PIHOLE_API_KEY is set.'
 
-  session_id=$(get_session_id) || return 1
-  disable_blocking "$duration" "$session_id"
-  local exit_status=$?
-  close_session "$session_id"
-  return "$exit_status"
+  with_pihole_session disable_blocking "$duration"
 }
 
 enable_command() {
@@ -425,11 +434,7 @@ enable_command() {
   fi
   debug 'PIHOLE_API_KEY is set.'
 
-  session_id=$(get_session_id) || return 1
-  enable_blocking "$duration" "$session_id"
-  local exit_status=$?
-  close_session "$session_id"
-  return "$exit_status"
+  with_pihole_session enable_blocking "$duration"
 }
 
 status_command() {
@@ -478,11 +483,7 @@ status_command() {
   fi
   debug 'PIHOLE_API_KEY is set.'
 
-  session_id=$(get_session_id) || return 1
-  blocking_status "$session_id"
-  local exit_status=$?
-  close_session "$session_id"
-  return "$exit_status"
+  with_pihole_session blocking_status
 }
 
 main() {
