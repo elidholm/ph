@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
-  PH_BIN="${BATS_TEST_DIRNAME}/../ph"
+  PH_BIN="${BATS_TEST_DIRNAME}/../../ph"
 }
 
 @test "prints usage and exits with error when run without command" {
