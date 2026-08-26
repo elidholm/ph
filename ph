@@ -45,6 +45,15 @@ Arguments:
 EOF
 }
 
+common_usage_args() {
+  cat <<EOF
+  -h, --help        Show this help message
+  -v, --verbose     Enable verbose logging
+  --no-color        Disable color output
+  -q, --quiet       Suppress all logging output (overrides verbose)
+EOF
+}
+
 print_disable_usage() {
   cat <<EOF
 
@@ -54,10 +63,7 @@ Disable Pi-hole blocking for a duration, then orignial blocking state resumes au
 
 Arguments:
   -<n>              Duration in seconds to disable Pi-hole (default: ${default_duration})
-  -h, --help        Show this help message
-  -v, --verbose     Enable verbose logging
-  --no-color        Disable color output
-  -q, --quiet       Suppress all logging output (overrides verbose)
+$(common_usage_args)
 
 Examples:
   ${0##*/} disable
@@ -74,10 +80,7 @@ Enable Pi-hole blocking for a duration, then original blocking state resumes aut
 
 Arguments:
   -<n>              Duration in seconds to enable Pi-hole (default: ${default_duration})
-  -h, --help        Show this help message
-  -v, --verbose     Enable verbose logging
-  --no-color        Disable color output
-  -q, --quiet       Suppress all logging output (overrides verbose)
+$(common_usage_args)
 
 Examples:
   ${0##*/} enable
@@ -93,10 +96,7 @@ Usage: ${0##*/} status [arguments]
 Show the current Pi-hole blocking status.
 
 Arguments:
-  -h, --help        Show this help message
-  -v, --verbose     Enable verbose logging
-  --no-color        Disable color output
-  -q, --quiet       Suppress all logging output (overrides verbose)
+$(common_usage_args)
 EOF
 }
 
