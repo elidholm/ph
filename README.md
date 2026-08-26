@@ -73,7 +73,7 @@ Requirements: `bash` + [`bats-core`](https://github.com/bats-core/bats-core).
 ```bash
 git clone https://github.com/elidholm/ph.git
 cd ph
-bats tests/unit/ph.bats
+bats tests/unit
 ```
 
 `tests/unit/` holds fast, mocked unit tests. `tests/smoke/` holds smoke tests that hit a real Pi-hole instance (e.g. the `pihole/pihole` Docker container used in CI) via `PIHOLE_API_URL`/`PIHOLE_API_KEY`, so `bats tests` is no longer run as a whole — running the unit tests explicitly avoids accidentally picking up smoke tests that need a live Pi-hole to pass.
