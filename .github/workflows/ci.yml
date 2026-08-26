@@ -88,4 +88,47 @@ jobs:
         env:
           BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
           TERM: xterm
-        run: bats tests
+        run: bats tests/unit
+
+  smoke-test:
+    name: Pi-hole smoke tests (Docker)
+    runs-on: ubuntu-latest
+    services:
+      pihole:
+        image: pihole/pihole:latest
+        ports:
+          - 8080:80
+        env:
+          TZ: 'UTC'
+          FTLCONF_webserver_api_password: 'ci-smoke-test-password'
+          FTLCONF_dns_listeningMode: 'ALL'
+    env:
+      PIHOLE_API_URL: 'http://localhost:8080/api'
+      PIHOLE_API_KEY: 'ci-smoke-test-password'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bats and bats libs
+        id: setup-bats
+        uses: bats-core/bats-action@4.0.0
+
+      - name: Wait for Pi-hole API to become ready
+        shell: bash
+        run: |
+          for _ in $(seq 1 30); do
+            if curl --silent --output /dev/null "${PIHOLE_API_URL}"; then
+              echo 'Pi-hole API is ready.'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Pi-hole API did not become ready in time.' >&2
+          exit 1
+
+      - name: Run Pi-hole smoke tests
+        shell: bash
+        env:
+          BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
+          TERM: xterm
+        run: bats tests/smoke
