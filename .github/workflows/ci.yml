@@ -72,3 +72,20 @@ jobs:
           echo "actionlint cache used: ${{ steps.actionlint.outputs.cache-hit }}"
           exit ${{ steps.actionlint.outputs.exit-code }}
 
+  bats-test:
+    name: Bats test suite (bats-core)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bats and bats libs
+        id: setup-bats
+        uses: bats-core/bats-action@4.0.0
+
+      - name: Run Bats tests
+        shell: bash
+        env:
+          BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
+          TERM: xterm
+        run: bats tests
