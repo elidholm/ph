@@ -296,6 +296,37 @@ close_session() {
   debug 'Pi-hole session closed.'
 }
 
+parse_common_argument() {
+  local usage_printer=$1
+  local argument=$2
+
+  case $argument in
+  help | -h | --help) # NOTE: Is the other help arguments still needed? They are handled in the command functions.
+    "$usage_printer"
+    return 0
+    ;;
+  -v | --verbose)
+    VERBOSE=true
+    debug 'Verbose logging enabled.'
+    ;;
+  --no-color)
+    debug 'Disabling color output.'
+    RED=$NC
+    GREEN=$NC
+    PURPLE=$NC
+    BLUE=$NC
+    SEA=$NC
+    YELLOW=$NC
+    ;;
+  -q | --quiet)
+    QUIET=true
+    ;;
+  *)
+    return 2
+    ;;
+  esac
+}
+
 require_environment() {
   verify_dependencies || return 1
   if [[ -z ${PIHOLE_API_URL-} ]]; then
@@ -330,11 +361,14 @@ disable_command() {
 
   for argument in "$@"; do
     debug "Parsing argument: $argument"
-    case $argument in
-    help | -h | --help)
-      print_disable_usage
+    parse_common_argument print_disable_usage "$argument"
+    parse_status=$?
+    if ((parse_status == 0)) && [[ $argument == @(help|-h|--help) ]]; then
       return 0
-      ;;
+    elif ((parse_status == 0)); then
+      continue
+    fi
+    case $argument in
     -[0-9]*)
       if [[ -n $duration ]]; then
         usage_error print_disable_usage 'disable accepts at most one duration.'
@@ -345,22 +379,6 @@ disable_command() {
         usage_error print_disable_usage "Duration must be a positive integer: ${argument@Q}"
         return 1
       fi
-      ;;
-    -v | --verbose)
-      VERBOSE=true
-      debug 'Verbose logging enabled.'
-      ;;
-    --no-color)
-      debug 'Disabling color output.'
-      RED=$NC
-      GREEN=$NC
-      PURPLE=$NC
-      BLUE=$NC
-      SEA=$NC
-      YELLOW=$NC
-      ;;
-    -q | --quiet)
-      QUIET=true
       ;;
     *)
       usage_error print_disable_usage "Unknown argument: ${argument@Q}"
@@ -383,11 +401,14 @@ enable_command() {
 
   for argument in "$@"; do
     debug "Parsing argument: $argument"
-    case $argument in
-    help | -h | --help)
-      print_enable_usage
+    parse_common_argument print_enable_usage "$argument"
+    parse_status=$?
+    if ((parse_status == 0)) && [[ $argument == @(help|-h|--help) ]]; then
       return 0
-      ;;
+    elif ((parse_status == 0)); then
+      continue
+    fi
+    case $argument in
     -[0-9]*)
       if [[ -n $duration ]]; then
         usage_error print_enable_usage 'enable accepts at most one duration.'
@@ -398,22 +419,6 @@ enable_command() {
         usage_error print_enable_usage "Duration must be a positive integer: ${argument@Q}"
         return 1
       fi
-      ;;
-    -v | --verbose)
-      VERBOSE=true
-      debug 'Verbose logging enabled.'
-      ;;
-    --no-color)
-      debug 'Disabling color output.'
-      RED=$NC
-      GREEN=$NC
-      PURPLE=$NC
-      BLUE=$NC
-      SEA=$NC
-      YELLOW=$NC
-      ;;
-    -q | --quiet)
-      QUIET=true
       ;;
     *)
       usage_error print_enable_usage "Unknown argument: ${argument@Q}"
@@ -435,32 +440,15 @@ status_command() {
 
   for argument in "$@"; do
     debug "Parsing argument: $argument"
-    case $argument in
-    help | -h | --help)
-      print_status_usage
+    parse_common_argument print_status_usage "$argument"
+    parse_status=$?
+    if ((parse_status == 0)) && [[ $argument == @(help|-h|--help) ]]; then
       return 0
-      ;;
-    -v | --verbose)
-      VERBOSE=true
-      debug 'Verbose logging enabled.'
-      ;;
-    --no-color)
-      debug 'Disabling color output.'
-      RED=$NC
-      GREEN=$NC
-      PURPLE=$NC
-      BLUE=$NC
-      SEA=$NC
-      YELLOW=$NC
-      ;;
-    -q | --quiet)
-      QUIET=true
-      ;;
-    *)
-      usage_error print_status_usage "Unknown argument: ${argument@Q}"
-      return 1
-      ;;
-    esac
+    elif ((parse_status == 0)); then
+      continue
+    fi
+    usage_error print_status_usage "Unknown argument: ${argument@Q}"
+    return 1
   done
 
   require_environment || return 1
