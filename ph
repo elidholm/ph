@@ -296,6 +296,20 @@ close_session() {
   debug 'Pi-hole session closed.'
 }
 
+require_environment() {
+  verify_dependencies || return 1
+  if [[ -z ${PIHOLE_API_URL-} ]]; then
+    fatal 'Environment variable PIHOLE_API_URL is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_URL is set.'
+  if [[ -z ${PIHOLE_API_KEY-} ]]; then
+    fatal 'Environment variable PIHOLE_API_KEY is required.'
+    return 1
+  fi
+  debug 'PIHOLE_API_KEY is set.'
+}
+
 with_pihole_session() {
   local work_fn=$1
   shift
@@ -358,18 +372,7 @@ disable_command() {
   duration=${duration:-$default_duration}
   debug "Resolved duration: ${duration}s"
 
-  verify_dependencies || return 1
-  if [[ -z ${PIHOLE_API_URL-} ]]; then
-    fatal 'Environment variable PIHOLE_API_URL is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_URL is set.'
-  if [[ -z ${PIHOLE_API_KEY-} ]]; then
-    fatal 'Environment variable PIHOLE_API_KEY is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_KEY is set.'
-
+  require_environment || return 1
   with_pihole_session disable_blocking "$duration"
 }
 
@@ -422,18 +425,7 @@ enable_command() {
   duration=${duration:-$default_duration}
   debug "Resolved duration: ${duration}s"
 
-  verify_dependencies || return 1
-  if [[ -z ${PIHOLE_API_URL-} ]]; then
-    fatal 'Environment variable PIHOLE_API_URL is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_URL is set.'
-  if [[ -z ${PIHOLE_API_KEY-} ]]; then
-    fatal 'Environment variable PIHOLE_API_KEY is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_KEY is set.'
-
+  require_environment || return 1
   with_pihole_session enable_blocking "$duration"
 }
 
@@ -471,18 +463,7 @@ status_command() {
     esac
   done
 
-  verify_dependencies || return 1
-  if [[ -z ${PIHOLE_API_URL-} ]]; then
-    fatal 'Environment variable PIHOLE_API_URL is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_URL is set.'
-  if [[ -z ${PIHOLE_API_KEY-} ]]; then
-    fatal 'Environment variable PIHOLE_API_KEY is required.'
-    return 1
-  fi
-  debug 'PIHOLE_API_KEY is set.'
-
+  require_environment || return 1
   with_pihole_session blocking_status
 }
 
