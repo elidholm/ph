@@ -38,6 +38,32 @@ setup() {
   [[ $output == *'--non-existing-argument'* ]]
 }
 
+@test "disable help documents the permanent flag" {
+  run "$PH_BIN" disable --help
+  ((status == 0))
+  [[ $output == *'--permanent'* ]]
+  [[ $output == *'-p,'* ]]
+}
+
+@test "fails when disable combines a duration with --permanent" {
+  run "$PH_BIN" disable -30 --permanent
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
+  [[ $output == *'Usage:'* ]]
+}
+
+@test "fails when disable combines --permanent with a duration" {
+  run "$PH_BIN" disable --permanent -30
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
+}
+
+@test "fails when disable combines -p with a duration" {
+  run "$PH_BIN" disable -p -30
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
+}
+
 @test "prints help for enable command" {
   run "$PH_BIN" enable --help
   ((status == 0))
@@ -50,6 +76,32 @@ setup() {
   ((status == 1))
   [[ $output == *'Unknown argument:'* ]]
   [[ $output == *'--non-existing-argument'* ]]
+}
+
+@test "enable help documents the permanent flag" {
+  run "$PH_BIN" enable --help
+  ((status == 0))
+  [[ $output == *'--permanent'* ]]
+  [[ $output == *'-p,'* ]]
+}
+
+@test "fails when enable combines a duration with --permanent" {
+  run "$PH_BIN" enable -30 --permanent
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
+  [[ $output == *'Usage:'* ]]
+}
+
+@test "fails when enable combines --permanent with a duration" {
+  run "$PH_BIN" enable --permanent -30
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
+}
+
+@test "fails when enable combines -p with a duration" {
+  run "$PH_BIN" enable -p -30
+  ((status == 1))
+  [[ $output == *'does not accept a duration together with --permanent'* ]]
 }
 
 @test "prints help for status command" {

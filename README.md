@@ -9,7 +9,7 @@
 
 ---
 
-`ph` is a small Bash CLI wrapper around the Pi-hole REST API. It currently lets you temporarily disable Pi-hole blocking for a chosen duration, with blocking resuming automatically afterwards.
+`ph` is a small Bash CLI wrapper around the Pi-hole REST API. It lets you enable or disable Pi-hole blocking, either temporarily for a chosen duration (with blocking resuming automatically afterwards) or permanently.
 
 ## Requirements
 
@@ -60,11 +60,16 @@
 ## Usage
 
 ```bash
-ph disable           # Disable blocking for the default duration (10 seconds)
-ph disable -30       # Disable blocking for 30 seconds
-ph disable --help    # Show help for the disable command
-ph --help            # Show general help
+ph disable              # Disable blocking for the default duration (10 seconds)
+ph disable -30          # Disable blocking for 30 seconds
+ph disable --permanent  # Disable blocking permanently (cancels any running timer)
+ph enable -p            # Enable blocking permanently
+ph status               # Show the current blocking status
+ph disable --help       # Show help for the disable command
+ph --help               # Show general help
 ```
+
+`--permanent` (short form `-p`) sets `timer` to `null` in the API call, so the requested state stays until you change it again. It cannot be combined with a duration.
 
 ## Local development (bash tests)
 
