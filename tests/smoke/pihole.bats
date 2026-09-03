@@ -54,3 +54,40 @@ setup() {
   ((status == 0))
   [[ $output == *'Enabled'* ]]
 }
+
+@test "permanent disable keeps blocking off past the default timer window" {
+  run "$PH_BIN" disable --permanent
+  ((status == 0))
+  [[ $output == *'[SUCCESS]'* ]]
+  [[ $output == *'permanently'* ]]
+
+  run "$PH_BIN" status
+  ((status == 0))
+  [[ $output == *'Disabled'* ]]
+  [[ $output == *'Permanent (no timer)'* ]]
+
+  sleep 4
+
+  run "$PH_BIN" status
+  ((status == 0))
+  [[ $output == *'Disabled'* ]]
+
+  # Restore blocking so subsequent tests start from a known state.
+  run "$PH_BIN" enable --permanent
+  ((status == 0))
+}
+
+@test "permanent enable clears any running timer" {
+  run "$PH_BIN" disable -60
+  ((status == 0))
+
+  run "$PH_BIN" enable -p
+  ((status == 0))
+  [[ $output == *'[SUCCESS]'* ]]
+  [[ $output == *'permanently'* ]]
+
+  run "$PH_BIN" status
+  ((status == 0))
+  [[ $output == *'Enabled'* ]]
+  [[ $output == *'Permanent (no timer)'* ]]
+}

@@ -8,8 +8,9 @@
 # License:     Apache License 2.0 (see LICENSE)
 #
 # Description:
-#   Small CLI wrapper around the Pi-hole REST API. Currently supports
-#   temporarily disabling Pi-hole blocking for a specified duration.
+#   Small CLI wrapper around the Pi-hole REST API. Currently supports enabling
+#   and disabling Pi-hole blocking, either temporarily for a specified duration
+#   or permanently.
 #
 
 # color codes
@@ -36,8 +37,8 @@ Usage: ${0##*/} [command] [arguments]
 Command line interface for the Pi-hole API.
 
 Commands:
-  disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds)
-  enable            Enable Pi-hole for a specified duration (default: ${default_duration} seconds)
+  disable           Disable Pi-hole for a specified duration (default: ${default_duration} seconds) or permanently
+  enable            Enable Pi-hole for a specified duration (default: ${default_duration} seconds) or permanently
   status            Show the current Pi-hole blocking status
 
 Arguments:
@@ -59,15 +60,18 @@ print_disable_usage() {
 
 Usage: ${0##*/} disable [arguments]
 
-Disable Pi-hole blocking for a duration, then orignial blocking state resumes automatically.
+Disable Pi-hole blocking, either for a duration after which the original blocking
+state resumes automatically, or permanently with --permanent.
 
 Arguments:
   -<n>              Duration in seconds to disable Pi-hole (default: ${default_duration})
+  -p, --permanent   Disable Pi-hole permanently (cancels any running timer)
 $(common_usage_args)
 
 Examples:
   ${0##*/} disable
   ${0##*/} disable -30
+  ${0##*/} disable --permanent
 EOF
 }
 
@@ -76,15 +80,18 @@ print_enable_usage() {
 
 Usage: ${0##*/} enable [arguments]
 
-Enable Pi-hole blocking for a duration, then original blocking state resumes automatically.
+Enable Pi-hole blocking, either for a duration after which the original blocking
+state resumes automatically, or permanently with --permanent.
 
 Arguments:
   -<n>              Duration in seconds to enable Pi-hole (default: ${default_duration})
+  -p, --permanent   Enable Pi-hole permanently (cancels any running timer)
 $(common_usage_args)
 
 Examples:
   ${0##*/} enable
   ${0##*/} enable -30
+  ${0##*/} enable --permanent
 EOF
 }
 
@@ -208,47 +215,63 @@ get_session_id() {
 }
 
 disable_blocking() {
-  local duration=$1
+  local timer=$1
   local session_id=$2
   local response
 
-  info "Disabling Pi-Hole for $duration seconds..."
-  debug "Sending disable request to Pi-hole API (timer=${duration})..."
+  if [[ $timer == null ]]; then
+    info 'Disabling Pi-Hole permanently...'
+  else
+    info "Disabling Pi-Hole for $timer seconds..."
+  fi
+  debug "Sending disable request to Pi-hole API (timer=${timer})..."
 
   if ! response=$(curl --silent --show-error --fail-with-body \
     --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
     --header 'Content-Type: application/json' \
     --header "X-FTL-SID: ${session_id}" \
-    --data "{\"blocking\":false,\"timer\":${duration}}" \
+    --data "{\"blocking\":false,\"timer\":${timer}}" \
     "${pihole_api_url}/dns/blocking"); then
     fatal 'Pi-hole blocking request failed.'
     return 1
   fi
 
   debug "Pi-hole response: $response"
-  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been disabled.'
+  if [[ $timer == null ]]; then
+    printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been disabled permanently.'
+  else
+    printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been disabled.'
+  fi
 }
 
 enable_blocking() {
-  local duration=$1
+  local timer=$1
   local session_id=$2
   local response
 
-  info "Enabling Pi-Hole for $duration seconds..."
-  debug "Sending enable request to Pi-hole API (timer=${duration})..."
+  if [[ $timer == null ]]; then
+    info 'Enabling Pi-Hole permanently...'
+  else
+    info "Enabling Pi-Hole for $timer seconds..."
+  fi
+  debug "Sending enable request to Pi-hole API (timer=${timer})..."
 
   if ! response=$(curl --silent --show-error --fail-with-body \
     --connect-timeout "$curl_timeout" --max-time "$curl_timeout" \
     --header 'Content-Type: application/json' \
     --header "X-FTL-SID: ${session_id}" \
-    --data "{\"blocking\":true,\"timer\":${duration}}" \
+    --data "{\"blocking\":true,\"timer\":${timer}}" \
     "${pihole_api_url}/dns/blocking"); then
     fatal 'Pi-hole blocking request failed.'
     return 1
   fi
 
   debug "Pi-hole response: $response"
-  printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been enabled.'
+  if [[ $timer == null ]]; then
+    printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been enabled permanently.'
+  else
+    printf "${GREEN}%s${NC}\n" '[SUCCESS]: Pi-hole blocking has been enabled.'
+  fi
 }
 
 blocking_status() {
@@ -269,7 +292,7 @@ blocking_status() {
 
   debug "Pi-hole response: $response"
   blocking_enabled=$(jq --exit-status --raw-output '.blocking // empty' <<<"$response")
-  timer=$(jq --exit-status --raw-output '.timer // empty' <<<"$response")
+  timer=$(jq --raw-output '.timer // "null"' <<<"$response")
   response_time=$(jq --exit-status --raw-output '.took // empty' <<<"$response")
 
   printf "${GREEN}%s${NC}\n" 'Pi-hole blocking status:'
@@ -279,7 +302,11 @@ blocking_status() {
   else
     printf "${RED}%s${NC}\n" 'Disabled'
   fi
-  printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Timer' ':' "${timer:-N/A}"
+  if [[ $timer == null ]]; then
+    printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Timer' ':' 'Permanent (no timer)'
+  else
+    printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Timer' ':' "$timer"
+  fi
   printf "\t${BLUE}%s${YELLOW}%s${NC} %s\n" 'Response time' ':' "${response_time}s"
 }
 
@@ -357,6 +384,8 @@ with_pihole_session() {
 disable_command() {
   local argument
   local duration=''
+  local permanent=false
+  local timer
   local session_id
 
   for argument in "$@"; do
@@ -369,6 +398,9 @@ disable_command() {
       continue
     fi
     case $argument in
+    -p | --permanent)
+      permanent=true
+      ;;
     -[0-9]*)
       if [[ -n $duration ]]; then
         usage_error print_disable_usage 'disable accepts at most one duration.'
@@ -387,16 +419,28 @@ disable_command() {
     esac
   done
 
-  duration=${duration:-$default_duration}
-  debug "Resolved duration: ${duration}s"
+  if [[ $permanent == true && -n $duration ]]; then
+    usage_error print_disable_usage 'disable does not accept a duration together with --permanent.'
+    return 1
+  fi
+
+  if [[ $permanent == true ]]; then
+    timer=null
+    debug 'Resolved timer: permanent (null)'
+  else
+    timer=${duration:-$default_duration}
+    debug "Resolved duration: ${timer}s"
+  fi
 
   require_environment || return 1
-  with_pihole_session disable_blocking "$duration"
+  with_pihole_session disable_blocking "$timer"
 }
 
 enable_command() {
   local argument
   local duration=''
+  local permanent=false
+  local timer
   local session_id
 
   for argument in "$@"; do
@@ -409,6 +453,9 @@ enable_command() {
       continue
     fi
     case $argument in
+    -p | --permanent)
+      permanent=true
+      ;;
     -[0-9]*)
       if [[ -n $duration ]]; then
         usage_error print_enable_usage 'enable accepts at most one duration.'
@@ -427,11 +474,21 @@ enable_command() {
     esac
   done
 
-  duration=${duration:-$default_duration}
-  debug "Resolved duration: ${duration}s"
+  if [[ $permanent == true && -n $duration ]]; then
+    usage_error print_enable_usage 'enable does not accept a duration together with --permanent.'
+    return 1
+  fi
+
+  if [[ $permanent == true ]]; then
+    timer=null
+    debug 'Resolved timer: permanent (null)'
+  else
+    timer=${duration:-$default_duration}
+    debug "Resolved duration: ${timer}s"
+  fi
 
   require_environment || return 1
-  with_pihole_session enable_blocking "$duration"
+  with_pihole_session enable_blocking "$timer"
 }
 
 status_command() {
