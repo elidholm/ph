@@ -13,7 +13,7 @@
 
 ## Requirements
 
-- Bash
+- [`bash`](https://www.gnu.org/software/bash/)
 - [`curl`](https://curl.se/)
 - [`jq`](https://jqlang.org/)
 
