@@ -81,7 +81,7 @@ jobs:
 
       - name: Setup Bats and bats libs
         id: setup-bats
-        uses: bats-core/bats-action@4.0.0
+        uses: bats-core/bats-action@4.1.0
 
       - name: Run Bats tests
         shell: bash
@@ -111,7 +111,7 @@ jobs:
 
       - name: Setup Bats and bats libs
         id: setup-bats
-        uses: bats-core/bats-action@4.0.0
+        uses: bats-core/bats-action@4.1.0
 
       - name: Wait for Pi-hole API to become ready
         shell: bash
